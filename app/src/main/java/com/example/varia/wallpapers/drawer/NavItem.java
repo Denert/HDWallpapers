@@ -1,13 +1,9 @@
 package com.example.varia.wallpapers.drawer;
 
-import android.app.Fragment;
+import android.support.v4.app.Fragment;
 import android.content.Context;
 
 import java.io.Serializable;
-
-/**
- * Created by varia on 02.11.2017.
- */
 
 public class NavItem implements Serializable {
     private String mText;

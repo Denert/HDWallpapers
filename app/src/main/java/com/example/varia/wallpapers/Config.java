@@ -13,6 +13,8 @@ public class Config {
 
     public static boolean USE_HARDCODED_CONFIG = false;
 
+    public static final int INTERSTITIAL_INTERVAL = 5;
+
     public static void configureMenu(SimpleMenu menu, ConfigParser.CallBack callBack){
         callBack.configLoaded(false);
     }

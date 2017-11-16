@@ -1,11 +1,11 @@
 package com.example.varia.wallpapers;
 
 import android.annotation.SuppressLint;
-import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
+import android.os.Build;
 import android.preference.PreferenceManager;
 import android.support.annotation.NonNull;
 import android.support.design.widget.NavigationView;
@@ -13,6 +13,7 @@ import android.support.design.widget.TabLayout;
 import android.support.v4.app.Fragment;
 import android.support.v4.content.ContextCompat;
 import android.support.v4.view.GravityCompat;
+import android.support.v4.view.ViewPager;
 import android.support.v4.widget.DrawerLayout;
 import android.support.v7.app.ActionBarDrawerToggle;
 import android.support.v7.app.AppCompatActivity;
@@ -27,76 +28,112 @@ import android.widget.Toast;
 import com.example.varia.wallpapers.drawer.MenuItemCallback;
 import com.example.varia.wallpapers.drawer.NavItem;
 import com.example.varia.wallpapers.drawer.SimpleMenu;
-import com.example.varia.wallpapers.util.DisableViewPager;
+import com.example.varia.wallpapers.drawer.TabAdapter;
+import com.example.varia.wallpapers.inherit.BackPressFragment;
+import com.example.varia.wallpapers.inherit.PermissionsFragment;
+import com.example.varia.wallpapers.util.DisableableViewPager;
 import com.example.varia.wallpapers.util.Helper;
+import com.google.android.gms.ads.AdListener;
+import com.google.android.gms.ads.AdRequest;
+import com.google.android.gms.ads.InterstitialAd;
 import com.google.android.gms.ads.MobileAds;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 public class MainActivity extends AppCompatActivity implements MenuItemCallback, ConfigParser.CallBack {
 
     private Toolbar mToolbar;
     private TabLayout tabLayout;
-    private DisableViewPager viewPager;
+    private DisableableViewPager viewPager;
     private NavigationView navigationView;
     private static SimpleMenu menu;
 
     private DrawerLayout drawer;
     private ActionBarDrawerToggle toggle;
+    private TabAdapter adapter;
+
+    private int interstitialCount = -1;
 
     public static String FRAGMENT_DATA = "transaction_data";
-    public static String FRAGMENT_CLASS = "transaction_target";
+    public static String FRAGMENT_CLASS = "transation_target";
 
     public static boolean TABLET_LAYOUT = true;
+
 
     List<NavItem> queueItem;
     MenuItem queueMenuItem;
 
+
     @Override
-    protected void onCreate(Bundle savedInstanceState) {
+    public void configLoaded(boolean facedException) {
+        if (facedException || menu.getFirstMenuItem() == null){
+            if (Helper.isOnlineShowDialog(MainActivity.this))
+                Toast.makeText(this, R.string.invalid_configuration, Toast.LENGTH_LONG).show();
+        } else {
+
+            menuItemClicked(menu.getFirstMenuItem().getValue(), menu.getFirstMenuItem().getKey(), false);
+        }
+    }
+
+    @Override
+    public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        MobileAds.initialize(this, getString(R.string.admob_app_id));//инифиализация рекламы
+        MobileAds.initialize(this, getString(R.string.admob_app_id));
+
 
         if (useTabletMenu()){
             setContentView(R.layout.activity_main_tablet);
             Helper.setStatusBarColor(MainActivity.this,
                     ContextCompat.getColor(this, R.color.myPrimaryDarkColor));
-        } else
+        } else {
             setContentView(R.layout.activity_main);
+        }
 
         mToolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(mToolbar);
 
-        if (!useTabletMenu()){
+        if (!useTabletMenu())
             getSupportActionBar().setDisplayShowHomeEnabled(true);
-        } else getSupportActionBar().setDisplayShowHomeEnabled(false);
+        else {
+            getSupportActionBar().setDisplayShowHomeEnabled(false);
+        }
 
-        if (!useTabletMenu()){
+
+        if (!useTabletMenu()) {
             drawer = (DrawerLayout) findViewById(R.id.drawer);
-            toggle = new ActionBarDrawerToggle(this, drawer, mToolbar,
-                    R.string.drawer_open, R.string.drawer_close);
+            toggle = new ActionBarDrawerToggle(
+                    this, drawer, mToolbar, R.string.drawer_open, R.string.drawer_close);
             drawer.setDrawerListener(toggle);
             toggle.syncState();
         }
 
-        tabLayout = (TabLayout) findViewById(R.id.tabs);
-        viewPager = (DisableViewPager) findViewById(R.id.viewpager);
 
-        if (getIntent().getExtras() != null && getIntent().getExtras().containsKey(FRAGMENT_CLASS)){//не разобрался
-            try{
-                Class<? extends Fragment> fragmentClass = (Class<? extends Fragment>) getIntent()
-                        .getExtras().getSerializable(FRAGMENT_CLASS);
-                if (fragmentClass != null){
+        tabLayout = (TabLayout) findViewById(R.id.tabs);
+        viewPager = (DisableableViewPager) findViewById(R.id.viewpager);
+
+
+        if (getIntent().getExtras() != null && getIntent().getExtras().containsKey(FRAGMENT_CLASS)) {
+            try {
+                Class<? extends Fragment> fragmentClass = (Class<? extends Fragment>) getIntent().getExtras().getSerializable(FRAGMENT_CLASS);
+                if (fragmentClass != null) {
                     String[] extra = getIntent().getExtras().getStringArray(FRAGMENT_DATA);
+                    HolderActivity.startActivity(this, fragmentClass, extra);
                     finish();
+
                 }
-            } catch (Exception e){}
+            } catch (Exception e) {
+                e.printStackTrace();
+
+            }
         }
 
+        //Menu items
         navigationView = (NavigationView) findViewById(R.id.nav_view);
         menu = new SimpleMenu(navigationView.getMenu(), this);
-        if (Config.USE_HARDCODED_CONFIG){//не понял
+        if (Config.USE_HARDCODED_CONFIG) {
             Config.configureMenu(menu, this);
         } else if (!Config.CONFIG_URL.isEmpty() && Config.CONFIG_URL.contains("http"))
             new ConfigParser(Config.CONFIG_URL, menu, this, this).execute();
@@ -104,65 +141,162 @@ public class MainActivity extends AppCompatActivity implements MenuItemCallback,
             new ConfigParser("config.json", menu, this, this).execute();
         tabLayout.setupWithViewPager(viewPager);
 
-        if(!useTabletMenu()){
+        if (!useTabletMenu()) {
             drawer.setStatusBarBackgroundColor(
                     ContextCompat.getColor(this, R.color.myPrimaryDarkColor));
         }
 
         applyDrawerLocks();
-    }
 
-    @Override
-    public void menuItemClicked(List<NavItem> action, MenuItem item, boolean requiresPurchase) {
+        Helper.admobLoader(this, getResources(), findViewById(R.id.adView));
+        Helper.updateAndroidSecurityProvider(this);
 
-        SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(getBaseContext());
-        boolean openOnStart = preferences.getBoolean("menuOpenOnStart", false);
-        if(drawer != null)
-            if (openOnStart && !useTabletMenu()) {
-                drawer.openDrawer(GravityCompat.START);
-            } else {
-                drawer.closeDrawer(GravityCompat.START);
+        viewPager.addOnPageChangeListener(new ViewPager.OnPageChangeListener() {
+            public void onPageScrollStateChanged(int state) {}
+            public void onPageScrolled(int position, float positionOffset, int positionOffsetPixels) {}
+
+            public void onPageSelected(int position) {
+                onTabBecomesActive(position);
             }
+        });
 
-        if(item != null){
-            for(MenuItem menuItem : menu.getMenuItems())
-                menuItem.setChecked(false);
-            item.setChecked(true);
-        }
-
-    }
-
-    @Override
-    public void configLoaded(boolean success) {
-        if (success || menu.getFirstMenuItem() == null){
-            if (Helper.isOnlineShowDialog(MainActivity.this))
-                Toast.makeText(this, R.string.invalid_configuration, Toast.LENGTH_LONG).show();
-        } else {
-            menuItemClicked(menu.getFirstMenuItem().getValue(), menu.getFirstMenuItem().getKey(),
-                    false);
-        }
     }
 
     @SuppressLint("NewApi")
     @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
-
-        switch (requestCode){
+    public void onRequestPermissionsResult(int requestCode, String[] permissions,
+                                           int[] grantResults) {
+        switch (requestCode) {
             case 1:
                 boolean foundfalse = false;
-                for (int i = 0; i < grantResults.length; i++){
-                    if (grantResults[i] != PackageManager.PERMISSION_GRANTED)
+                int res = 0;
+                for (String perms : permissions){
+                    res = checkCallingOrSelfPermission(perms);
+                    if (!(res == PackageManager.PERMISSION_GRANTED)){
                         foundfalse = true;
+                    }
                 }
-                if (!foundfalse)
+                if (!foundfalse){
+
                     menuItemClicked(queueItem, queueMenuItem, false);
-                else Toast.makeText(MainActivity.this, getResources()
-                        .getString(R.string.permissions_required), Toast.LENGTH_SHORT).show();
+
+                } else {
+
+                    Toast.makeText(MainActivity.this, getResources().getString(R.string.permissions_required), Toast.LENGTH_SHORT)
+                            .show();
+                }
                 break;
             default:
                 super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         }
     }
+
+    @Override
+    public void menuItemClicked(List<NavItem> actions, MenuItem item, boolean requiresPurchase) {
+
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(getBaseContext());
+        boolean openOnStart = prefs.getBoolean("menuOpenOnStart", false);
+        if (drawer != null)
+            if (openOnStart && !useTabletMenu() && adapter == null) {
+                drawer.openDrawer(GravityCompat.START);
+            } else {
+
+                drawer.closeDrawer(GravityCompat.START);
+            }
+
+
+        if (!checkPermissionsHandleIfNeeded(actions, item)) return;
+
+        if (item != null) {
+            for (MenuItem menuItem : menu.getMenuItems())
+                menuItem.setChecked(false);
+            item.setChecked(true);
+        }
+
+        adapter = new TabAdapter(getSupportFragmentManager(), actions, this);
+        viewPager.setAdapter(adapter);
+
+        if (actions.size() == 1) {
+            tabLayout.setVisibility(View.GONE);
+            viewPager.setPagingEnabled(false);
+        } else {
+            tabLayout.setVisibility(View.VISIBLE);
+            viewPager.setPagingEnabled(true);
+        }
+
+
+        showInterstitial(false);
+
+        onTabBecomesActive(0);
+
+    }
+
+    private void onTabBecomesActive(int position){
+
+        if (position != 0)
+            showInterstitial(true);
+    }
+
+
+    private void showInterstitial(boolean fromPager){
+
+        if (getResources().getString(R.string.admob_interstitial_id).length() == 0) return;
+
+        if (interstitialCount == (Config.INTERSTITIAL_INTERVAL - 1)) {
+            final InterstitialAd mInterstitialAd = new InterstitialAd(this);
+            mInterstitialAd.setAdUnitId(getResources().getString(R.string.admob_interstitial_id));
+            AdRequest adRequestInter = new AdRequest.Builder().addTestDevice(AdRequest.DEVICE_ID_EMULATOR).build();
+            mInterstitialAd.setAdListener(new AdListener() {
+                @Override
+                public void onAdLoaded() {
+                    mInterstitialAd.show();
+                }
+            });
+            mInterstitialAd.loadAd(adRequestInter);
+
+            interstitialCount = 0;
+        } else {
+            interstitialCount++;
+        }
+
+    }
+
+    private boolean checkPermissionsHandleIfNeeded(List<NavItem> tabs, MenuItem item){
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.M) return true;
+
+        List<String> allPermissions = new ArrayList<>();
+        for (NavItem tab : tabs){
+            if (PermissionsFragment.class.isAssignableFrom(tab.getFragment())) {
+                try {
+                    allPermissions.addAll(Arrays.asList(((PermissionsFragment) tab.getFragment().newInstance()).requiredPermissions()));
+                } catch (Exception e) {
+                    e.printStackTrace();
+
+                }
+            }
+        }
+
+        if (allPermissions.size() > 1) {
+            boolean allGranted = true;
+            for (String permission : allPermissions) {
+                if (checkSelfPermission(permission) != PackageManager.PERMISSION_GRANTED)
+                    allGranted = false;
+            }
+
+            if (!allGranted) {
+
+                requestPermissions(allPermissions.toArray(new String[0]), 1);
+                queueItem = tabs;
+                queueMenuItem = item;
+                return false;
+            }
+
+            return true;
+        }
+
+        return true;
+    }
+
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
@@ -171,15 +305,34 @@ public class MainActivity extends AppCompatActivity implements MenuItemCallback,
         return true;
     }
 
+
+
+    @Override
+    public void onBackPressed() {
+        Fragment activeFragment = null;
+        if (adapter != null)
+            activeFragment = adapter.getCurrentFragment();
+
+        if (drawer != null && drawer.isDrawerOpen(GravityCompat.START)) {
+            drawer.closeDrawer(GravityCompat.START);
+        } else if (activeFragment instanceof BackPressFragment){
+            boolean handled = ((BackPressFragment) activeFragment).handleBackPress();
+            if (!handled){
+                super.onBackPressed();
+            }
+        } else {
+            super.onBackPressed();
+        }
+    }
+
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-
-        @SuppressLint("RestrictedApi") List<Fragment> fragments = getSupportFragmentManager().getFragments();
+        List<Fragment> fragments = getSupportFragmentManager().getFragments();
         if (fragments != null)
-            for (Fragment fragment : fragments)
-                if(fragment != null)
-                    fragment.onActivityResult(requestCode,resultCode,data);
+            for (Fragment frag : fragments)
+                if (frag != null)
+                    frag.onActivityResult(requestCode, resultCode, data);
     }
 
     @Override
@@ -188,19 +341,23 @@ public class MainActivity extends AppCompatActivity implements MenuItemCallback,
         getWindow().getDecorView().findViewById(android.R.id.content).invalidate();
     }
 
+
     public boolean useTabletMenu(){
         return (getResources().getBoolean(R.bool.isWideTablet) && TABLET_LAYOUT);
     }
 
+
     public void applyDrawerLocks(){
-        if(drawer == null){
-            if(Config.HIDE_DRAWER)
+        if (drawer == null) {
+            if (Config.HIDE_DRAWER)
                 navigationView.setVisibility(View.GONE);
             return;
         }
 
-        if(Config.HIDE_DRAWER){
+        if (Config.HIDE_DRAWER){
             toggle.setDrawerIndicatorEnabled(false);
+            drawer.setDrawerLockMode(DrawerLayout.LOCK_MODE_LOCKED_CLOSED);
+        } else {
             drawer.setDrawerLockMode(DrawerLayout.LOCK_MODE_UNLOCKED);
         }
     }

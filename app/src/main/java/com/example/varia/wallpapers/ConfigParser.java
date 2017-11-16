@@ -1,14 +1,15 @@
 package com.example.varia.wallpapers;
 
 import android.app.Activity;
-import android.app.Fragment;
 import android.content.res.Resources;
 import android.os.AsyncTask;
+import android.support.v4.app.Fragment;
 import android.util.Log;
 
 import com.example.varia.wallpapers.drawer.NavItem;
 import com.example.varia.wallpapers.drawer.SimpleMenu;
 import com.example.varia.wallpapers.drawer.SimpleSubMenu;
+import com.example.varia.wallpapers.ui.WallpapersFragment;
 import com.example.varia.wallpapers.util.Helper;
 
 import org.json.JSONArray;
@@ -24,10 +25,6 @@ import java.io.ObjectOutput;
 import java.io.ObjectOutputStream;
 import java.util.ArrayList;
 import java.util.List;
-
-/**
- * Created by varia on 03.11.2017.
- */
 
 public class ConfigParser extends AsyncTask<Void, Void, Void> {
 
@@ -136,7 +133,7 @@ public class ConfigParser extends AsyncTask<Void, Void, Void> {
     public static NavItem navItemFromJSON(JSONObject jsonTab) throws JSONException{
         String tabTitle = jsonTab.getString("title");
 
-        Class<? extends Fragment> tabClass = null;
+        Class<? extends Fragment> tabClass = WallpapersFragment.class;
 
         JSONArray args = jsonTab.getJSONArray("arguments");
         List<String> list = new ArrayList<String>();
